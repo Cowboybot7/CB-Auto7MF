@@ -18,12 +18,12 @@ jobs:
           echo "[$(date)] Starting keep-alive loop..."
 
           for i in {1..10}; do
-            curl -s https://cb-auto7mh.onrender.com/healthz > /dev/null
+            curl -s https://cb-auto7mf.onrender.com/healthz > /dev/null
             echo "[$(date)] Ping $i completed."
             sleep 10
           done
 
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://cb-auto7mh.onrender.com/healthz)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://cb-auto7mf.onrender.com/healthz)
           echo "[$(date)] Final HTTP status: $RESPONSE"
 
           if [ "$RESPONSE" -ne 200 ]; then
@@ -53,7 +53,7 @@ jobs:
           START_TIME=${{ steps.start.outputs.start_time }}
           DURATION=$((END_TIME - START_TIME))
 
-          MESSAGE=$(printf "%s *CB-Auto7MH Deployment Status*\n\n⏱ *Time:* %s\n⏳ *Duration:* %ds\n🚦 *Status:* %s" \
+          MESSAGE=$(printf "%s *CB-Auto7MF Deployment Status*\n\n⏱ *Time:* %s\n⏳ *Duration:* %ds\n🚦 *Status:* %s" \
             "$EMOJI" "$TIMESTAMP" "$DURATION" "$STATUS")
 
           curl -s -X POST \
