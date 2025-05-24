@@ -487,6 +487,7 @@ async def letgo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task = create_task(task_wrapper())
     scan_tasks[chat_id] = task
 
+#Telegram App
 application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("letgo", letgo))
