@@ -160,8 +160,9 @@ def schedule_next_scan(job_queue, force_next_morning=False):
     for job in job_queue.get_jobs_by_name("reminder"):
         job.schedule_removal()
 
-    now = TIMEZONE.localize(datetime.now())
-
+    now = datetime.now(TIMEZONE)
+    logger.info(f"🕒 Current time: {now}")
+    
     def get_next_slot(now):
         scan_slots = {
             0: [("morning", 7, 45, 59), ("evening", 18, 7, 37)],
@@ -518,7 +519,7 @@ async def main():
 
     await application.bot.set_webhook(os.getenv("WEBHOOK_URL"))
     print("✅ Webhook set")
-
+    await post_init(application)
     # ✅ Keep running indefinitely (instead of updater.wait_closed())
     await asyncio.Event().wait()
 
