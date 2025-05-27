@@ -378,12 +378,16 @@ async def perform_scan_in(bot, chat_id, context=None):
                 time.sleep(0.5)
 
             scan_in_btn.click()
-            await bot.send_message(chat_id, "🔄 Processing mission...")
+            await bot.send_message(chat_id, "✅ Scan In button clicked. Waiting for confirmation...")
+            
+            # Wait for button to disappear or get disabled as confirmation
+            try:
+                WebDriverWait(driver, 15).until(
+                    lambda d: not scan_in_btn.is_displayed() or scan_in_btn.get_attribute("disabled")
+                )
+            except Exception:
+                await bot.send_message(chat_id, "⚠️ Scan In button might not have disappeared. Continuing anyway...")
 
-            # Add timeout fallback
-            WebDriverWait(driver, 25).until(
-                EC.url_contains("frmclock.aspx")
-            )
         except TimeoutException:
             await bot.send_message(chat_id, "❌ Timeout waiting for Mission button")
             driver.save_screenshot("timeout_mission.png")
