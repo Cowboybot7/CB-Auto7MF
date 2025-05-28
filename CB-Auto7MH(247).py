@@ -224,7 +224,9 @@ def schedule_next_scan(job_queue, force_next_morning=False):
         if delay_reminder > 0:
             job_queue.run_once(send_reminder, when=delay_reminder, data=next_run, name="reminder")
             logger.info(f"⏰ Scheduled reminder at {reminder_time.strftime('%Y-%m-%d %H:%M:%S')} ICT")
-
+        global last_scheduled_time, last_reminder_time
+        last_scheduled_time = next_run
+        last_reminder_time = reminder_time if delay_reminder > 0 else None
         return next_run
 
 async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -233,23 +235,16 @@ async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ You are not authorized to use this bot")
         return
 
-    job_queue = context.application.job_queue
+    global last_scheduled_time, last_reminder_time
 
-    # 🛠 Get all scheduled jobs without filtering by time
-    auto_jobs = [j for j in job_queue.get_jobs_by_name("auto_scanin") if j.next_t]
-    reminder_jobs = [j for j in job_queue.get_jobs_by_name("reminder") if j.next_t]
-
-    if not auto_jobs:
+    if not last_scheduled_time:
         await update.message.reply_text("ℹ️ No auto mission is currently scheduled.")
         return
 
-    # ✅ Show the soonest job regardless of current time
-    next_auto = min(auto_jobs, key=lambda j: j.next_t).next_t.astimezone(TIMEZONE)
-    msg = f"🕒 *Next auto mission:* {next_auto.strftime('%A %Y-%m-%d %H:%M')} ICT"
+    msg = f"🕒 *Next auto mission:* {last_scheduled_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
 
-    if reminder_jobs:
-        next_reminder = min(reminder_jobs, key=lambda j: j.next_t).next_t.astimezone(TIMEZONE)
-        msg += f"\n⏰ *Reminder:* {next_reminder.strftime('%A %Y-%m-%d %H:%M')} ICT"
+    if last_reminder_time:
+        msg += f"\n⏰ *Reminder:* {last_reminder_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
 
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -558,7 +553,7 @@ async def main():
     # Start the bot with polling
     await application.initialize()
     await application.start()
-    await application.updater.start_polling()
+    # await application.updater.start_polling()
     print("🤖 Bot polling started...")
 
     # Now safely initialize commands and schedule
