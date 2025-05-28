@@ -233,9 +233,17 @@ async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ You are not authorized to use this bot")
         return
 
-    job_queue = context.job_queue
-    auto_jobs = job_queue.get_jobs_by_name("auto_scanin")
-    reminder_jobs = job_queue.get_jobs_by_name("reminder")
+    now = datetime.now(pytz.utc)
+
+    # Filter and sort future jobs
+    auto_jobs = sorted(
+        [j for j in context.job_queue.get_jobs_by_name("auto_scanin") if j.next_t and j.next_t > now],
+        key=lambda j: j.next_t
+    )
+    reminder_jobs = sorted(
+        [j for j in context.job_queue.get_jobs_by_name("reminder") if j.next_t and j.next_t > now],
+        key=lambda j: j.next_t
+    )
 
     if not auto_jobs:
         await update.message.reply_text("ℹ️ No auto mission is currently scheduled.")
