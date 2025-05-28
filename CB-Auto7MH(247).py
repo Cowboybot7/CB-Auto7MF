@@ -222,13 +222,18 @@ def schedule_next_scan(job_queue, force_next_morning=False):
         job_queue.run_once(auto_scanin_job, when=delay_seconds, name="auto_scanin")
         logger.info(f"✅ Scheduled next mission at {next_run.strftime('%Y-%m-%d %H:%M:%S')} ICT")
 
-        # Schedule reminder
+        # FIXED REMINDER SCHEDULING
         if delay_reminder > 0:
             job_queue.run_once(send_reminder, when=delay_reminder, data=next_run, name="reminder")
             logger.info(f"⏰ Scheduled reminder at {reminder_time.strftime('%Y-%m-%d %H:%M:%S')} ICT")
-        global last_scheduled_time, last_reminder_time
+            last_reminder_time = reminder_time
+        else:
+            # Don't schedule reminder if time has already passed
+            logger.warning(f"⚠️ Reminder time {reminder_time.strftime('%H:%M')} is in the past. Skipping reminder.")
+            last_reminder_time = None
+
+        global last_scheduled_time
         last_scheduled_time = next_run
-        last_reminder_time = reminder_time if delay_reminder > 0 else None
 
         return next_run
 
