@@ -330,7 +330,16 @@ async def post_init(application):
         BotCommand("cancel", "Cancel ongoing operation"),
         BotCommand("next", "View next auto mission and reminder")
     ])
-    schedule_next_scan(application.job_queue)  # Start scheduling
+
+    # ✅ FULLY REMOVE any existing jobs by name
+    job_queue = application.job_queue
+    for name in ["auto_scanin", "reminder"]:
+        for job in job_queue.get_jobs_by_name(name):
+            job.schedule_removal()
+    logger.info("🧹 Cleared previous scheduled jobs")
+
+    # Now safe to reschedule
+    schedule_next_scan(job_queue)
     logger.info("🚀 post_init complete: Commands set and schedule initialized.")
 
 async def perform_scan_in(bot, chat_id, context=None):
