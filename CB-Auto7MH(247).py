@@ -60,6 +60,8 @@ driver_lock = Lock()
 scan_tasks = {}
 is_auto_scan_running = False
 schedule_lock = Lock()
+last_scheduled_time = None
+last_reminder_time = None
 
 # Configure logging
 logging.basicConfig(
@@ -227,6 +229,7 @@ def schedule_next_scan(job_queue, force_next_morning=False):
         global last_scheduled_time, last_reminder_time
         last_scheduled_time = next_run
         last_reminder_time = reminder_time if delay_reminder > 0 else None
+
         return next_run
 
 async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
