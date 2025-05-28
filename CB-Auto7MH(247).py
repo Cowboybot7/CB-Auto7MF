@@ -533,7 +533,9 @@ async def main():
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler("next", nextjob))
     application.post_init = post_init
-
+    await post_init(application)
+    logger.info("🚀 post_init: Commands set and schedule_next_scan triggered")
+    
     # Create health check server for Render + UptimeRobot
     app = web.Application()
     app.router.add_get("/healthz", handle_health_check)
