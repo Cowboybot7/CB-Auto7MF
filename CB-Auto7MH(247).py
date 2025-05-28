@@ -238,15 +238,14 @@ async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reminder_jobs = job_queue.get_jobs_by_name("reminder")
 
     if not auto_jobs:
-        logger.info("ℹ️ /next: No auto_scanin job scheduled")
         await update.message.reply_text("ℹ️ No auto mission is currently scheduled.")
         return
 
-    next_mission_time = auto_jobs[0].next_t.replace(tzinfo=TIMEZONE)
+    next_mission_time = auto_jobs[0].next_t.astimezone(TIMEZONE)
     msg = f"🕒 *Next auto mission:* {next_mission_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
 
     if reminder_jobs:
-        reminder_time = reminder_jobs[0].next_t.replace(tzinfo=TIMEZONE)
+        reminder_time = reminder_jobs[0].next_t.astimezone(TIMEZONE)
         msg += f"\n⏰ *Reminder:* {reminder_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
 
     await update.message.reply_text(msg, parse_mode="Markdown")
