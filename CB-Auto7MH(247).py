@@ -154,6 +154,7 @@ async def auto_scanin_job(context: ContextTypes.DEFAULT_TYPE):
         schedule_next_scan(context.job_queue)
         
 def schedule_next_scan(job_queue, force_next_morning=False):
+    logger.info("🔁 Running schedule_next_scan (force_next_morning=%s)", force_next_morning)
     with schedule_lock:
         # Remove existing scheduled jobs
         for job in job_queue.get_jobs_by_name("auto_scanin"):
@@ -237,6 +238,7 @@ async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reminder_jobs = job_queue.get_jobs_by_name("reminder")
 
     if not auto_jobs:
+        logger.info("ℹ️ /next: No auto_scanin job scheduled")
         await update.message.reply_text("ℹ️ No auto mission is currently scheduled.")
         return
 
@@ -322,7 +324,8 @@ async def post_init(application):
         BotCommand("next", "View next auto mission and reminder")
     ])
     schedule_next_scan(application.job_queue)  # Start scheduling
-    
+    logger.info("🚀 post_init complete: Commands set and schedule initialized.")
+
 async def perform_scan_in(bot, chat_id, context=None):
     driver, (lat, lon) = create_driver()
     screenshot_file = None
