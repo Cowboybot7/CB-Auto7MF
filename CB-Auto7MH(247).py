@@ -556,7 +556,7 @@ async def main():
     # Start the bot with polling
     await application.initialize()
     await application.start()
-    # await application.updater.start_polling()
+    await application.updater.start_polling()
     print("🤖 Bot polling started...")
 
     # Now safely initialize commands and schedule
