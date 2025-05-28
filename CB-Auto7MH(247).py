@@ -236,12 +236,13 @@ async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = datetime.now(pytz.utc)
 
     # Get only future jobs
+    job_queue = context.application.job_queue  # ✅ use the shared scheduler instance
     auto_jobs = sorted(
-        [j for j in context.job_queue.get_jobs_by_name("auto_scanin") if j.next_t and j.next_t > now],
+        [j for j in job_queue.get_jobs_by_name("auto_scanin") if j.next_t and j.next_t > now],
         key=lambda j: j.next_t
     )
     reminder_jobs = sorted(
-        [j for j in context.job_queue.get_jobs_by_name("reminder") if j.next_t and j.next_t > now],
+        [j for j in job_queue.get_jobs_by_name("reminder") if j.next_t and j.next_t > now],
         key=lambda j: j.next_t
     )
 
@@ -332,7 +333,7 @@ async def post_init(application):
     ])
 
     # ✅ FULLY REMOVE any existing jobs by name
-    job_queue = context.job_queue
+    job_queue = application.job_queue  # ✅ correct reference
     for name in ["auto_scanin", "reminder"]:
         for job in job_queue.get_jobs_by_name(name):
             job.schedule_removal()
