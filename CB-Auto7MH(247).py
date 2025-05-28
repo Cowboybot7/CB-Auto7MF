@@ -225,7 +225,30 @@ def schedule_next_scan(job_queue, force_next_morning=False):
             logger.info(f"⏰ Scheduled reminder at {reminder_time.strftime('%Y-%m-%d %H:%M:%S')} ICT")
 
         return next_run
-    
+
+async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if user_id not in AUTHORIZED_USERS:
+        await update.message.reply_text("❌ You are not authorized to use this bot")
+        return
+
+    job_queue = context.job_queue
+    auto_jobs = job_queue.get_jobs_by_name("auto_scanin")
+    reminder_jobs = job_queue.get_jobs_by_name("reminder")
+
+    if not auto_jobs:
+        await update.message.reply_text("ℹ️ No auto mission is currently scheduled.")
+        return
+
+    next_mission_time = auto_jobs[0].next_t.replace(tzinfo=TIMEZONE)
+    msg = f"🕒 *Next auto mission:* {next_mission_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
+
+    if reminder_jobs:
+        reminder_time = reminder_jobs[0].next_t.replace(tzinfo=TIMEZONE)
+        msg += f"\n⏰ *Reminder:* {reminder_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
+
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
 async def cancelauto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in AUTHORIZED_USERS:
@@ -295,7 +318,8 @@ async def post_init(application):
         BotCommand("start", "Show welcome message"),
         BotCommand("letgo", "Initiate mission"),
         BotCommand("cancelauto", "Cancel next auto mission and reschedule"),
-        BotCommand("cancel", "Cancel ongoing operation")
+        BotCommand("cancel", "Cancel ongoing operation"),
+        BotCommand("next", "View next auto mission and reminder")
     ])
     schedule_next_scan(application.job_queue)  # Start scheduling
     
@@ -504,6 +528,7 @@ async def main():
     application.add_handler(CommandHandler("letgo", letgo))
     application.add_handler(CommandHandler("cancelauto", cancelauto))
     application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CommandHandler("next", nextjob))
     application.post_init = post_init
 
     # Create health check server for Render + UptimeRobot
