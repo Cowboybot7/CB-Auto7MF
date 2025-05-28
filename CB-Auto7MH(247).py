@@ -274,6 +274,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if driver:
         try:
             filename = f"cancelled_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            time.sleep(1.5)
             driver.save_screenshot(filename)
             with open(filename, 'rb') as photo:
                 await update.message.reply_photo(photo=photo)
