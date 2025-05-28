@@ -332,7 +332,7 @@ async def post_init(application):
     ])
 
     # ✅ FULLY REMOVE any existing jobs by name
-    job_queue = application.job_queue
+    job_queue = context.application.job_queue
     for name in ["auto_scanin", "reminder"]:
         for job in job_queue.get_jobs_by_name(name):
             job.schedule_removal()
