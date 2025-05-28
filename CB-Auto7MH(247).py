@@ -234,27 +234,28 @@ async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     now = datetime.now(pytz.utc)
+    job_queue = context.application.job_queue  # ✅ guaranteed same instance
 
-    # Get only future jobs
-    job_queue = context.application.job_queue  # ✅ use the shared scheduler instance
-    auto_jobs = sorted(
-        [j for j in job_queue.get_jobs_by_name("auto_scanin") if j.next_t and j.next_t > now],
-        key=lambda j: j.next_t
-    )
-    reminder_jobs = sorted(
-        [j for j in job_queue.get_jobs_by_name("reminder") if j.next_t and j.next_t > now],
-        key=lambda j: j.next_t
-    )
+    # Filter future jobs
+    auto_jobs = [
+        j for j in job_queue.get_jobs_by_name("auto_scanin")
+        if j.next_t and j.next_t > now
+    ]
+    reminder_jobs = [
+        j for j in job_queue.get_jobs_by_name("reminder")
+        if j.next_t and j.next_t > now
+    ]
 
     if not auto_jobs:
         await update.message.reply_text("ℹ️ No auto mission is currently scheduled.")
         return
 
-    next_mission_time = auto_jobs[0].next_t.astimezone(TIMEZONE)
-    msg = f"🕒 *Next auto mission:* {next_mission_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
+    # Get exact scheduled job time (the one we just logged)
+    auto_job_time = min(j.next_t for j in auto_jobs).astimezone(TIMEZONE)
+    msg = f"🕒 *Next auto mission:* {auto_job_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
 
     if reminder_jobs:
-        reminder_time = reminder_jobs[0].next_t.astimezone(TIMEZONE)
+        reminder_time = min(j.next_t for j in reminder_jobs).astimezone(TIMEZONE)
         msg += f"\n⏰ *Reminder:* {reminder_time.strftime('%A %Y-%m-%d %H:%M')} ICT"
 
     await update.message.reply_text(msg, parse_mode="Markdown")
