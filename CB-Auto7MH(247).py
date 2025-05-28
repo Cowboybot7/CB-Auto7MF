@@ -234,19 +234,16 @@ async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     job_queue = context.application.job_queue
-    all_jobs = job_queue.jobs()
-    for job in all_jobs:
-        logger.info(f"🔍 Job: {job.name}, Next: {job.next_t}")
 
-    now = datetime.now(pytz.utc)
-
-    auto_jobs = [j for j in job_queue.get_jobs_by_name("auto_scanin") if j.next_t and j.next_t > now]
-    reminder_jobs = [j for j in job_queue.get_jobs_by_name("reminder") if j.next_t and j.next_t > now]
+    # 🛠 Get all scheduled jobs without filtering by time
+    auto_jobs = [j for j in job_queue.get_jobs_by_name("auto_scanin") if j.next_t]
+    reminder_jobs = [j for j in job_queue.get_jobs_by_name("reminder") if j.next_t]
 
     if not auto_jobs:
         await update.message.reply_text("ℹ️ No auto mission is currently scheduled.")
         return
 
+    # ✅ Show the soonest job regardless of current time
     next_auto = min(auto_jobs, key=lambda j: j.next_t).next_t.astimezone(TIMEZONE)
     msg = f"🕒 *Next auto mission:* {next_auto.strftime('%A %Y-%m-%d %H:%M')} ICT"
 
