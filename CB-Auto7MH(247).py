@@ -524,33 +524,34 @@ async def letgo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_health_check(request):
     return web.Response(text="OK")
-    
+
 async def main():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    # Register command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("letgo", letgo))
     application.add_handler(CommandHandler("cancelauto", cancelauto))
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler("next", nextjob))
-    application.post_init = post_init
-    await post_init(application)
-    logger.info("🚀 post_init: Commands set and schedule_next_scan triggered")
-    
-    # Create health check server for Render + UptimeRobot
+
+    # Set up aiohttp health check route for Render/UptimeRobot
     app = web.Application()
     app.router.add_get("/healthz", handle_health_check)
-
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 8000)))
     await site.start()
     print("✅ Health check route available at /healthz")
 
-    # Start the bot with polling (safe with background tasks)
+    # Start the bot with polling
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
     print("🤖 Bot polling started...")
+
+    # Now safely initialize commands and schedule
+    await post_init(application)
 
     # Run indefinitely
     await asyncio.Event().wait()
