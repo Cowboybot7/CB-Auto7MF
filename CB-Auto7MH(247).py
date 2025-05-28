@@ -233,15 +233,13 @@ async def nextjob(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ You are not authorized to use this bot")
         return
 
-    now = datetime.now(pytz.utc)
-    job_queue = context.application.job_queue  # ✅ use the exact shared scheduler instance
-
-    # LOG all scheduled jobs to verify
+    job_queue = context.application.job_queue
     all_jobs = job_queue.jobs()
     for job in all_jobs:
         logger.info(f"🔍 Job: {job.name}, Next: {job.next_t}")
 
-    # Get all future jobs of each type
+    now = datetime.now(pytz.utc)
+
     auto_jobs = [j for j in job_queue.get_jobs_by_name("auto_scanin") if j.next_t and j.next_t > now]
     reminder_jobs = [j for j in job_queue.get_jobs_by_name("reminder") if j.next_t and j.next_t > now]
 
