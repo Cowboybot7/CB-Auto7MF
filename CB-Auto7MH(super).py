@@ -160,7 +160,6 @@ def schedule_next_scan(job_queue, force_next_morning=False):
             2: [("morning", 7, 45, 59), ("evening", 18, 7, 37)],
             3: [("morning", 7, 45, 59), ("evening", 18, 7, 37)],
             4: [("morning", 7, 45, 59), ("evening", 18, 7, 37)],
-            5: [("morning", 7, 45, 59), ("afternoon", 12, 7, 17)],  # Saturday
         }
 
         for day_offset in range(8):
@@ -179,7 +178,7 @@ def schedule_next_scan(job_queue, force_next_morning=False):
         next_run = None
         for i in range(1, 8):  # Check next 7 days
             future = now + timedelta(days=i)
-            if future.weekday() in [0, 1, 2, 3, 4, 5]:  # Mon–Sat
+            if future.weekday() in [0, 1, 2, 3, 4]:  # Mon–Friday
                 hour = 7
                 minute = random.randint(45, 59)
                 next_run = TIMEZONE.localize(datetime.combine(future.date(), dt_time(hour, minute)))
