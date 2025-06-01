@@ -36,4 +36,4 @@ WORKDIR /app
 COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python", "-u", "CB-Auto7MH(247).py"]
+CMD ["python", "-u", "CB-Auto7E&A.py"]
