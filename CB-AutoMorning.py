@@ -519,15 +519,21 @@ async def handle_root(request):
     
 async def main():
     await application.initialize()
+    commands = [
+        BotCommand("start", "Show welcome message"),
+        BotCommand("scanin", "Manual scan-in"),
+        BotCommand("cancel", "Cancel current scan"),
+        BotCommand("pause_auto", "Pause daily auto scan"),
+        BotCommand("resume_auto", "Resume daily auto scan"),
+    ]
     
-    # Create web application
+    await application.bot.set_my_commands(commands)
+    schedule_daily_scan(application)
+    
     app = web.Application()
     app.router.add_get("/", handle_root)  # Add this line
     app.router.add_get("/healthz", handle_health_check)
     app.router.add_post("/webhook", handle_telegram_webhook)  # Changed endpoint
-    
-    await application.initialize()
-    schedule_daily_scan(application)
     
     runner = web.AppRunner(app)
     await runner.setup()
