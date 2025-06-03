@@ -188,17 +188,20 @@ def schedule_daily_scan(application):
     def reschedule():
         minute = random.randint(45, 59)
         logger.info(f"✅ Rescheduled scan-in at 7:{minute:02d} AM ICT")
-
+    
         scheduler.add_job(
             lambda: trigger_auto_scan(application),
             CronTrigger(day_of_week='mon,tue,wed,thu,fri,sat', hour=7, minute=minute),
             id='daily_random_scan',
             replace_existing=True
         )
-
+    
+        # Try logging the next run time safely
         job = scheduler.get_job('daily_random_scan')
-        if job:
+        if job and job.next_run_time:
             logger.info(f"📅 Next scan-in scheduled for: {job.next_run_time.astimezone(TIMEZONE)}")
+        else:
+            logger.warning("⚠️ Job added, but next_run_time not yet available.")
 
     # Reschedule daily at 6:00 AM (Mon–Sat only)
     scheduler.add_job(
