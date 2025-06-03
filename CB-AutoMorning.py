@@ -500,7 +500,7 @@ application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("scanin", scanin))
 application.add_handler(CommandHandler("cancel", cancel))
-pplication.add_handler(CommandHandler("pause_auto", pause_auto))
+application.add_handler(CommandHandler("pause_auto", pause_auto))
 application.add_handler(CommandHandler("resume_auto", resume_auto))
 
 # Health check route
