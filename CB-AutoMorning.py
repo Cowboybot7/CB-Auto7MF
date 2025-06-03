@@ -196,10 +196,11 @@ def schedule_daily_scan(application):
             replace_existing=True
         )
     
-        # Try logging the next run time safely
         job = scheduler.get_job('daily_random_scan')
-        if job and job.next_run_time:
-            logger.info(f"📅 Next scan-in scheduled for: {job.next_run_time.astimezone(TIMEZONE)}")
+        next_run = getattr(job, "next_run_time", None)
+    
+        if next_run:
+            logger.info(f"📅 Next scan-in scheduled for: {next_run.astimezone(TIMEZONE)}")
         else:
             logger.warning("⚠️ Job added, but next_run_time not yet available.")
 
