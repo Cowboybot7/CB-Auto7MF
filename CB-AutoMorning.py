@@ -53,6 +53,7 @@ BASE_LATITUDE = float(os.getenv('BASE_LATITUDE', '11.545380'))
 BASE_LONGITUDE = float(os.getenv('BASE_LONGITUDE', '104.911449'))
 MAX_DEVIATION_METERS = 150
 
+scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 auto_scan_enabled = True
 user_scan_tasks = {}
 user_drivers = {}
@@ -157,6 +158,14 @@ def schedule_daily_scan(application):
 
     random_minute_scan()
     scheduler.start()
+    
+async def next_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    job = scheduler.get_job('daily_random_scan')
+    if job:
+        next_run = job.next_run_time.astimezone(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
+        await update.message.reply_text(f"📅 Next auto scan-in:\n{next_run} (ICT)")
+    else:
+        await update.message.reply_text("⚠️ No auto scan-in currently scheduled.")
 
 async def trigger_auto_scan(app):
     if not auto_scan_enabled:
@@ -176,19 +185,29 @@ async def trigger_auto_scan(app):
         user_scan_tasks[user_id] = task
 
 def schedule_daily_scan(application):
-    scheduler = AsyncIOScheduler(timezone=TIMEZONE)
-
     def reschedule():
         minute = random.randint(45, 59)
+        logger.info(f"✅ Rescheduled scan-in at 7:{minute:02d} AM ICT")
+
         scheduler.add_job(
             lambda: trigger_auto_scan(application),
-            CronTrigger(hour=7, minute=minute),
+            CronTrigger(day_of_week='mon,tue,wed,thu,fri,sat', hour=7, minute=minute),
             id='daily_random_scan',
             replace_existing=True
         )
-        logger.info(f"✅ Rescheduled scan-in at 7:{minute:02d} AM ICT")
 
-    scheduler.add_job(reschedule, CronTrigger(hour=6, minute=0))  # Reschedule every day at 6AM
+        job = scheduler.get_job('daily_random_scan')
+        if job:
+            logger.info(f"📅 Next scan-in scheduled for: {job.next_run_time.astimezone(TIMEZONE)}")
+
+    # Reschedule daily at 6:00 AM (Mon–Sat only)
+    scheduler.add_job(
+        reschedule,
+        CronTrigger(day_of_week='mon,tue,wed,thu,fri,sat', hour=6, minute=0),
+        id='daily_rescheduler',
+        replace_existing=True
+    )
+
     reschedule()
     scheduler.start()
 
@@ -502,6 +521,7 @@ application.add_handler(CommandHandler("scanin", scanin))
 application.add_handler(CommandHandler("cancel", cancel))
 application.add_handler(CommandHandler("pause_auto", pause_auto))
 application.add_handler(CommandHandler("resume_auto", resume_auto))
+application.add_handler(CommandHandler("next", next_scan))
 
 # Health check route
 async def handle_health_check(request):
@@ -525,6 +545,7 @@ async def main():
         BotCommand("cancel", "Cancel current scan"),
         BotCommand("pause_auto", "Pause daily auto scan"),
         BotCommand("resume_auto", "Resume daily auto scan"),
+        BotCommand("next", "Show next auto scan-in time"),
     ]
     
     await application.bot.set_my_commands(commands)
