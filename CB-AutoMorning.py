@@ -141,33 +141,41 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id, "⚠️ No active browser session found.")
     else:
         await context.bot.send_message(chat_id, "ℹ️ No active scan-in process to cancel.")
-
-def schedule_daily_scan(application):
-    scheduler = AsyncIOScheduler(timezone=TIMEZONE)
-
-    def random_minute_scan():
-        minute = random.randint(45, 59)
-        trigger = CronTrigger(hour=7, minute=minute)
-        scheduler.add_job(
-            lambda: trigger_auto_scan(application),
-            trigger=trigger,
-            id='daily_random_scan',
-            replace_existing=True
-        )
-        logger.info(f"✅ Scheduled scan-in at 7:{minute:02d} AM ICT")
-
-    random_minute_scan()
-    scheduler.start()
     
 async def next_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    job = scheduler.get_job('daily_random_scan')
-    if job:
-        next_run = job.next_run_time.astimezone(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
-        await update.message.reply_text(f"📅 Next auto scan-in:\n{next_run} (ICT)")
-    else:
-        await update.message.reply_text("⚠️ No auto scan-in currently scheduled.")
+    response_lines = []
+    job_ids = ['daily_morning_scan', 'daily_reminder']
 
+    for job_id in job_ids:
+        job = scheduler.get_job(job_id)
+        if job and job.next_run_time:
+            time_str = job.next_run_time.astimezone(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
+            label = "🕒 Morning Auto Scan" if job_id == 'daily_morning_scan' else "⏰ Reminder"
+            response_lines.append(f"{label} → {time_str} (ICT)")
+        else:
+            label = "Morning Auto Scan" if job_id == 'daily_morning_scan' else "Reminder"
+            response_lines.append(f"⚠️ {label} not scheduled.")
+
+    await update.message.reply_text("📅 Scheduled Times:\n" + "\n".join(response_lines))
+    
+async def run_auto_scan_for_user(app, user_id, chat_id):
+    """Helper function to run scan for a specific user"""
+    try:
+        logger.info(f"Starting auto scan for user {user_id}")
+        await perform_scan_in(
+            app.bot, 
+            chat_id, 
+            user_id, 
+            {"cancelled": False},
+            is_auto=True  # Mark as auto scan
+        )
+    except Exception as e:
+        logger.error(f"Auto scan failed for user {user_id}: {str(e)}")
+        
 async def trigger_auto_scan(app):
+    logger.info("⚙️ Auto scan triggered")
+    logger.info(f"AUTHORIZED_USERS = {AUTHORIZED_USERS}")
+    logger.info(f"auto_scan_enabled = {auto_scan_enabled}")
     if not auto_scan_enabled:
         logger.info("🚫 Auto scan skipped (paused by user)")
         return
@@ -175,45 +183,80 @@ async def trigger_auto_scan(app):
     for user_id in AUTHORIZED_USERS:
         chat_id = int(user_id)
         if user_id in user_scan_tasks and not user_scan_tasks[user_id].done():
-            continue  # skip if already scanning
-        async def scan_task():
-            try:
-                await perform_scan_in(app.bot, chat_id, user_id, {"cancelled": False})
-            except Exception as e:
-                logger.error(f"Auto scan failed for user {user_id}: {str(e)}")
-        task = asyncio.create_task(scan_task())
+            logger.info(f"⚠️ User {user_id} already has an active scan task. Skipping.")
+            continue
+
+        # Create and store task for this user
+        task = asyncio.create_task(run_auto_scan_for_user(app, user_id, chat_id))
         user_scan_tasks[user_id] = task
+        logger.info(f"🔧 Created auto scan task for user {user_id}")
 
 def schedule_daily_scan(application):
-    def reschedule():
-        minute = random.randint(45, 59)
-        logger.info(f"✅ Rescheduled scan-in at 7:{minute:02d} AM ICT")
-    
+    def schedule_morning_scans():
+        now = datetime.now(TIMEZONE)
+        weekday = now.weekday()
+
+        # Monday-Saturday: 7:47AM-7:59AM
+        if weekday <= 5:  # 0=Monday, 5=Saturday
+            hour = 7
+            minute = random.randint(47, 59)
+            logger.info(f"✅ Scheduled morning scan at {hour:02d}:{minute:02d} ICT")
+        else:
+            logger.info("🛌 Sunday - No scan scheduled")
+            return
+
+        # Schedule auto scan
         scheduler.add_job(
-            lambda: trigger_auto_scan(application),
-            CronTrigger(day_of_week='mon,tue,wed,thu,fri,sat', hour=7, minute=minute),
-            id='daily_random_scan',
+            trigger_auto_scan,
+            CronTrigger(day_of_week='mon-sat',
+                        hour=hour,
+                        minute=minute),
+            args=[application],  # Pass application instance
+            id='daily_morning_scan',
             replace_existing=True
         )
-    
-        job = scheduler.get_job('daily_random_scan')
-        next_run = getattr(job, "next_run_time", None)
-    
-        if next_run:
-            logger.info(f"📅 Next scan-in scheduled for: {next_run.astimezone(TIMEZONE)}")
-        else:
-            logger.warning("⚠️ Job added, but next_run_time not yet available.")
 
-    # Reschedule daily at 6:00 AM (Mon–Sat only)
+        # Reminder 1 hour before
+        reminder_hour = hour - 1
+        reminder_minute = minute
+
+        async def send_reminders():
+            for user_id in AUTHORIZED_USERS:
+                try:
+                    await application.bot.send_message(
+                        chat_id=int(user_id),
+                        text=f"🔔 Reminder: Morning scan will run at {hour:02d}:{minute:02d} ICT (in 1 hour)"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send reminder to {user_id}: {e}")
+
+        scheduler.add_job(
+            lambda: asyncio.create_task(send_reminders()),
+            CronTrigger(day_of_week='mon-sat',
+                        hour=reminder_hour,
+                        minute=reminder_minute),
+            id='daily_reminder',
+            replace_existing=True
+        )
+
+        # Optional debug log
+        for job in scheduler.get_jobs():
+            run_time = getattr(job, "next_run_time", None)
+            if run_time:
+                logger.info(f"📌 Job Scheduled: {job.id} at {run_time.astimezone(TIMEZONE)}")
+            else:
+                logger.info(f"📌 Job Scheduled: {job.id} but no next run time")
+
+    # Recalculate scan time every day at 6AM ICT
     scheduler.add_job(
-        reschedule,
-        CronTrigger(day_of_week='mon,tue,wed,thu,fri,sat', hour=6, minute=0),
+        schedule_morning_scans,
+        CronTrigger(day_of_week='mon-sat', hour=6, minute=0),
         id='daily_rescheduler',
         replace_existing=True
     )
 
-    reschedule()
-    scheduler.start()
+    # Initial scheduling
+    schedule_morning_scans()
 
 async def pause_auto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global auto_scan_enabled
@@ -225,13 +268,15 @@ async def resume_auto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     auto_scan_enabled = True
     await update.message.reply_text("✅ Auto scan-in resumed.")
     
-async def perform_scan_in(bot, chat_id, user_id, cancel_flag):
+async def perform_scan_in(bot, chat_id, user_id, cancel_flag, is_auto=False):  # Added is_auto flag
     driver = None
     try:
         driver, (lat, lon) = create_driver()
         user_drivers[user_id] = driver
         start_time = datetime.now(TIMEZONE).strftime("%H:%M:%S")
-        await bot.send_message(chat_id, f"🕒 Automation started at {start_time} (ICT)")
+        
+        if not is_auto:  # Only send message for manual scans
+            await bot.send_message(chat_id, f"🕒 Automation started at {start_time} (ICT)")
         
         # Step 1: Login
         await bot.send_message(chat_id, "🚀 Starting browser automation...")
@@ -347,13 +392,15 @@ async def perform_scan_in(bot, chat_id, user_id, cancel_flag):
         # Only cleanup if not cancelled
         if driver and not cancel_flag["cancelled"]:
             driver.quit()
-            user_drivers.pop(user_id, None)
+            if user_id in user_drivers:
+                del user_drivers[user_id]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send welcome message"""
     await update.message.reply_text(
         "🚀 Attendance Bot Ready!\n"
-        "Use /scanin to trigger the automation process"
+        "Use /scanin to trigger the automation process\n"
+        "Morning auto scan: 7:47-7:59 AM ICT (Mon-Sat)"
     )
 
 async def scanin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -543,6 +590,7 @@ async def handle_root(request):
     
 async def main():
     await application.initialize()
+    await application.start()
     commands = [
         BotCommand("start", "Show welcome message"),
         BotCommand("scanin", "Manual scan-in"),
@@ -580,6 +628,10 @@ async def main():
         drop_pending_updates=True
     )
     
+    # Start scheduler only once here
+    if not scheduler.running:
+        scheduler.start()
+    
     # Verify webhook was set
     webhook_info = await application.bot.get_webhook_info()
     logger.info(f"Webhook Info: {webhook_info}")
@@ -593,4 +645,10 @@ async def main():
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Create a new event loop explicitly
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(main())
+    finally:
+        loop.close()
