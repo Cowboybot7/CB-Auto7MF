@@ -12,13 +12,10 @@ import logging
 import time
 from datetime import datetime
 import pytz
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
+from math import radians, sin, cos, sqrt, atan2
 import math
 import random
 from telegram import BotCommand
-from math import radians, sin, cos, sqrt, atan2
-from asyncio import Task
 import asyncio
 from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -171,6 +168,7 @@ async def run_auto_scan_for_user(app, user_id, chat_id):
         )
     except Exception as e:
         logger.error(f"Auto scan failed for user {user_id}: {str(e)}")
+        logger.error(traceback.format_exc())
         
 async def trigger_auto_scan(app):
     logger.info("⚙️ Auto scan triggered")
@@ -206,7 +204,7 @@ def schedule_daily_scan(application):
             return
 
         # Schedule auto scan
-        scheduler.add_job(
+        job = scheduler.add_job(
             trigger_auto_scan,
             CronTrigger(day_of_week='mon-sat',
                         hour=hour,
@@ -215,6 +213,7 @@ def schedule_daily_scan(application):
             id='daily_morning_scan',
             replace_existing=True
         )
+        logger.info(f"📌 Auto scan job scheduled: {job.next_run_time}")
 
         # Reminder 1 hour before
         reminder_hour = hour - 1
@@ -230,7 +229,7 @@ def schedule_daily_scan(application):
                 except Exception as e:
                     logger.warning(f"Failed to send reminder to {user_id}: {e}")
 
-        scheduler.add_job(
+        job = scheduler.add_job(
             lambda: asyncio.create_task(send_reminders()),
             CronTrigger(day_of_week='mon-sat',
                         hour=reminder_hour,
@@ -238,14 +237,7 @@ def schedule_daily_scan(application):
             id='daily_reminder',
             replace_existing=True
         )
-
-        # Optional debug log
-        for job in scheduler.get_jobs():
-            run_time = getattr(job, "next_run_time", None)
-            if run_time:
-                logger.info(f"📌 Job Scheduled: {job.id} at {run_time.astimezone(TIMEZONE)}")
-            else:
-                logger.info(f"📌 Job Scheduled: {job.id} but no next run time")
+        logger.info(f"📌 Reminder job scheduled: {job.next_run_time}")
 
     # Recalculate scan time every day at 6AM ICT
     scheduler.add_job(
@@ -428,143 +420,24 @@ async def scanin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success = await perform_scan_in(context.bot, chat_id, user_id, {"cancelled": False})
     
         except asyncio.CancelledError:
-            await cancellation_handler(context, chat_id, user_id)
-            
+            await context.bot.send_message(chat_id, "⛔ Scan cancelled by user")
+            if driver:
+                driver.quit()
+                if user_id in user_drivers:
+                    del user_drivers[user_id]
+        except Exception as e:
+            logger.error(f"Scan failed: {str(e)}")
+            logger.error(traceback.format_exc())
         finally:
-            await safe_cleanup(user_id)
+            # Cleanup driver if still exists
+            if user_id in user_drivers:
+                driver = user_drivers[user_id]
+                if driver:
+                    driver.quit()
+                del user_drivers[user_id]
 
     task = asyncio.create_task(scan_task())
     user_scan_tasks[user_id] = task
-
-async def cancellation_handler(context, chat_id, user_id):
-    """Guaranteed cancellation handling"""
-    try:
-        await context.bot.send_message(chat_id, "⛔ Cancelling...")
-        
-        # 1. Triple-check driver existence
-        driver = user_drivers.get(user_id)
-        if not driver:
-            # Attempt direct recovery
-            driver = await recover_driver(user_id)
-            if not driver:
-                raise RuntimeError("Browser session unrecoverable")
-
-        # 2. Forced state stabilization
-        try:
-            driver.execute_script("document.body.style.visibility = 'visible';")
-            WebDriverWait(driver, 3).until(
-                lambda d: d.execute_script("return document.readyState") == "complete"
-            )
-        except:
-            logger.warning("State stabilization failed, proceeding anyway")
-
-        # 3. Guaranteed screenshot capture
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            driver.save_screenshot(tmp.name)
-            tmp.close()
-            
-            try:
-                with open(tmp.name, 'rb') as f:
-                    await context.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=f,
-                        caption=f"🚫 Cancelled at {datetime.now(TIMEZONE).strftime('%H:%M:%S')}"
-                    )
-            except Exception as e:
-                logger.error(f"Photo send failed: {str(e)}")
-                await send_fallback(context, chat_id, tmp.name)
-            
-            os.unlink(tmp.name)
-
-        await context.bot.send_message(chat_id, "🔴 Process terminated")
-
-    except Exception as e:
-        logger.error(f"Cancellation failure: {str(e)}")
-        await emergency_capture(context, chat_id, user_id)
-
-async def recover_driver(user_id):
-    """Last-resort driver recovery"""
-    try:
-        # Check existing processes
-        driver = webdriver.Remote(
-            command_executor=user_drivers[user_id].command_executor._url,
-            desired_capabilities=user_drivers[user_id].capabilities
-        )
-        driver.session_id = user_drivers[user_id].session_id
-        return driver
-    except Exception as e:
-        logger.error(f"Driver recovery failed: {str(e)}")
-        return None
-
-async def safe_cleanup(user_id):
-    """Safe resource cleanup"""
-    driver = user_drivers.pop(user_id, None)
-    if driver:
-        try:
-            # 1. Capture final state
-            driver.save_screenshot(f"/tmp/last_state_{user_id}.png")
-            
-            # 2. Graceful quit
-            driver.quit()
-            
-            # 3. Force cleanup
-            os.system(f"pkill -f {driver.service.process.pid}")
-        except Exception as e:
-            logger.error(f"Cleanup error: {str(e)}")
-
-async def emergency_screenshot(context, chat_id, driver):
-    """Last-resort capture"""
-    try:
-        driver.save_screenshot("/tmp/emergency.png")
-        with open("/tmp/emergency.png", "rb") as f:
-            await context.bot.send_document(chat_id, document=f)
-    except Exception as e:
-        await context.bot.send_message(chat_id, "⚠️ Complete failure")
-
-async def force_cleanup(user_id):
-    """Guaranteed resource removal"""
-    driver = user_drivers.pop(user_id, None)
-    if driver:
-        try:
-            driver.quit()
-        except:
-            pass
-        os.system(f"pkill -f chromedriver.*{user_id}")
-
-def create_driver_options():
-    """Centralized driver configuration"""
-    options = Options()
-    options.binary_location = '/usr/bin/chromium'
-    options.add_argument('--headless=new')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1920,1080')
-    options.add_experimental_option("prefs", {
-        "profile.default_content_setting_values.geolocation": 1,
-    })
-    return options
-
-async def send_fallback_screenshot(context, chat_id, driver):
-    """Emergency screenshot handler"""
-    try:
-        if driver:
-            driver.save_screenshot("/tmp/emergency.png")
-            with open("/tmp/emergency.png", "rb") as f:
-                await context.bot.send_document(chat_id, document=f)
-    except Exception as e:
-        logger.error(f"Fallback screenshot failed: {str(e)}")
-        await context.bot.send_message(chat_id, "⚠️ Failed to capture any state")
-
-def cleanup_driver(user_id):
-    """Guaranteed resource cleanup"""
-    driver = user_drivers.pop(user_id, None)
-    if driver:
-        try:
-            driver.service.process.kill()
-        except Exception as e:
-            logger.warning(f"Process kill warning: {str(e)}")
-        finally:
-            driver.quit()
 
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
@@ -601,12 +474,18 @@ async def main():
     ]
     
     await application.bot.set_my_commands(commands)
+    
+    # Start scheduler before scheduling jobs
+    if not scheduler.running:
+        scheduler.start()
+        logger.info("Scheduler started")
+    
     schedule_daily_scan(application)
     
     app = web.Application()
-    app.router.add_get("/", handle_root)  # Add this line
+    app.router.add_get("/", handle_root)
     app.router.add_get("/healthz", handle_health_check)
-    app.router.add_post("/webhook", handle_telegram_webhook)  # Changed endpoint
+    app.router.add_post("/webhook", handle_telegram_webhook)
     
     runner = web.AppRunner(app)
     await runner.setup()
@@ -615,6 +494,7 @@ async def main():
     port = int(os.getenv("PORT", 8000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
+    logger.info(f"Server started on port {port}")
     
     # Set webhook with proper URL
     webhook_url = os.getenv("WEBHOOK_URL")
@@ -628,10 +508,6 @@ async def main():
         drop_pending_updates=True
     )
     
-    # Start scheduler only once here
-    if not scheduler.running:
-        scheduler.start()
-    
     # Verify webhook was set
     webhook_info = await application.bot.get_webhook_info()
     logger.info(f"Webhook Info: {webhook_info}")
@@ -640,6 +516,12 @@ async def main():
         logger.error(f"Webhook URL mismatch: {webhook_info.url} != {webhook_url}")
     else:
         logger.info("✅ Webhook successfully set")
+    
+    # Log scheduled jobs
+    jobs = scheduler.get_jobs()
+    logger.info(f"Total scheduled jobs: {len(jobs)}")
+    for job in jobs:
+        logger.info(f"Job ID: {job.id}, Next run: {job.next_run_time}")
     
     # Keep application running
     await asyncio.Event().wait()
@@ -650,5 +532,8 @@ if __name__ == "__main__":
     asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
     finally:
+        scheduler.shutdown()
         loop.close()
