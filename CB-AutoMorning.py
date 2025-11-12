@@ -48,7 +48,7 @@ AUTHORIZED_USERS = [uid.strip() for uid in os.getenv('AUTHORIZED_USERS', '').spl
 TIMEZONE = pytz.timezone('Asia/Bangkok')
 BASE_LATITUDE = float(os.getenv('BASE_LATITUDE', '11.545380'))
 BASE_LONGITUDE = float(os.getenv('BASE_LONGITUDE', '104.911449'))
-MAX_DEVIATION_METERS = 150
+MAX_DEVIATION_METERS = 120
 
 scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 auto_scan_enabled = True
@@ -194,10 +194,10 @@ def schedule_daily_scan(application):
         now = datetime.now(TIMEZONE)
         weekday = now.weekday()
 
-        # Monday-Saturday: 7:47AM-7:59AM
+        # Monday-Saturday: 7:36AM-7:48AM
         if weekday <= 5:  # 0=Monday, 5=Saturday
             hour = 7
-            minute = random.randint(47, 59)
+            minute = random.randint(36, 48)
             logger.info(f"✅ Scheduled morning scan at {hour:02d}:{minute:02d} ICT")
         else:
             logger.info("🛌 Sunday - No scan scheduled")
@@ -537,3 +537,4 @@ if __name__ == "__main__":
     finally:
         scheduler.shutdown()
         loop.close()
+
