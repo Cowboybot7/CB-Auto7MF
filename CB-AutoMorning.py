@@ -356,7 +356,7 @@ async def perform_scan_in(bot, chat_id, user_id, cancel_flag, is_auto=False):  #
                 chat_id=chat_id,
                 photo=photo,
                 caption=(
-                  f"✅ Successful scan confirmed at {datetime.now(TIMEZONE).strftime('%H:%M:%S')} (ICT)\n"
+                  f"✅ Successful mission confirmed at {datetime.now(TIMEZONE).strftime('%H:%M:%S')} (ICT)\n"
                   f"📍 *Location:* `{lat:.6f}, {lon:.6f}`\n"
                   f"📏 *Distance from Office:* {distance}m\n"
                   f"🗺 [View on Map](https://maps.google.com/maps?q={lat},{lon})"
@@ -391,8 +391,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send welcome message"""
     await update.message.reply_text(
         "🚀 Attendance Bot Ready!\n"
-        "Use /scanin to trigger the automation process\n"
-        "Morning auto scan: 7:47-7:59 AM ICT (Mon-Sat)"
+        "Use /mission to trigger the automation process\n"
+        "Morning auto mission: 7:47-7:59 AM ICT (Mon-Sat)"
     )
 
 async def scanin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -404,7 +404,7 @@ async def scanin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user_id in user_scan_tasks and not user_scan_tasks[user_id].done():
-        await update.message.reply_text("⚠️ Scan in progress. Use /cancel")
+        await update.message.reply_text("⚠️ Mission in progress. Use /cancel")
         return
 
     async def scan_task():
@@ -416,11 +416,11 @@ async def scanin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"Driver stored for {user_id}")
             
             # 2. Start scan process
-            await context.bot.send_message(chat_id, "⏳ Starting scan...")
+            await context.bot.send_message(chat_id, "⏳ Starting mission...")
             success = await perform_scan_in(context.bot, chat_id, user_id, {"cancelled": False})
     
         except asyncio.CancelledError:
-            await context.bot.send_message(chat_id, "⛔ Scan cancelled by user")
+            await context.bot.send_message(chat_id, "⛔ Mission cancelled by user")
             if driver:
                 driver.quit()
                 if user_id in user_drivers:
@@ -537,4 +537,5 @@ if __name__ == "__main__":
     finally:
         scheduler.shutdown()
         loop.close()
+
 
