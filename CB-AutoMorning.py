@@ -194,10 +194,10 @@ def schedule_daily_scan(application):
         now = datetime.now(TIMEZONE)
         weekday = now.weekday()
 
-        # Monday-Saturday: 7:36AM-7:48AM
+        # Monday-Saturday: 7:38AM-7:53AM
         if weekday <= 5:  # 0=Monday, 5=Saturday
             hour = 7
-            minute = random.randint(36, 48)
+            minute = random.randint(38, 53)
             logger.info(f"✅ Scheduled morning scan at {hour:02d}:{minute:02d} ICT")
         else:
             logger.info("🛌 Sunday - No scan scheduled")
@@ -537,5 +537,6 @@ if __name__ == "__main__":
     finally:
         scheduler.shutdown()
         loop.close()
+
 
 
